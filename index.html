@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Philadelphia Asset Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; background: #f5f4f0; }
+  .header { background: #3C3489; color: #fff; padding: 12px 20px; flex-shrink: 0; }
+  .header h1 { font-size: 17px; font-weight: 500; }
+  .header p  { font-size: 11px; color: #AFA9EC; margin-top: 2px; }
+  .controls { background: #fff; border-bottom: 1px solid #D3D1C7; padding: 9px 14px; display: flex; flex-wrap: wrap; gap: 7px; flex-shrink: 0; }
+  .layer-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 14px; border: 1.5px solid; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.12s; font-family: inherit; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  #map { flex: 1; }
+  .leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important; padding: 0 !important; }
+  .leaflet-popup-content { margin: 0 !important; }
+  .popup { padding: 12px 14px; min-width: 160px; max-width: 220px; font-family: system-ui, sans-serif; }
+  .popup-cat  { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .popup-name { font-size: 14px; font-weight: 500; color: #1a1a18; margin-bottom: 3px; }
+  .popup-addr { font-size: 11px; color: #5F5E5A; }
+  .status-bar { background: #fff; border-top: 1px solid #D3D1C7; padding: 6px 16px; display: flex; flex-wrap: wrap; gap: 14px; flex-shrink: 0; }
+  .status-item { font-size: 11px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Philadelphia Asset Map</h1>
+  <p>SSC Module · Geographies of Wealth · Toggle layers to explore the city</p>
+</div>
+
+<div class="controls" id="controls"></div>
+<div id="map"></div>
+<div class="status-bar" id="status"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const LAYERS = [
+  { id:"libraries",        label:"Libraries",            color:"#7F77DD", bg:"#EEEDFE" },
+  { id:"transit",          label:"Transit",              color:"#378ADD", bg:"#E6F1FB" },
+  { id:"green",            label:"Green space",          color:"#639922", bg:"#EAF3DE" },
+  { id:"hospitals",        label:"Hospitals",            color:"#D85A30", bg:"#FAECE7" },
+  { id:"community_health", label:"Community health",     color:"#993C1D", bg:"#FFF0EB" },
+  { id:"food",             label:"Food access",          color:"#1D9E75", bg:"#E1F5EE" },
+  { id:"anchor",           label:"Anchor institutions",  color:"#BA7517", bg:"#FAEEDA" },
+  { id:"employment",       label:"Employment",           color:"#534AB7", bg:"#EEEDFE" },
+];
+
+const PLACES = [
+  { id:"libraries", name:"Free Library – Central",           address:"1901 Vine St",             lat:39.9597, lng:-75.1706 },
+  { id:"libraries", name:"Free Library – Kingsessing",       address:"1201 S 51st St",           lat:39.9402, lng:-75.2277 },
+  { id:"libraries", name:"Free Library – Germantown",        address:"5418 Germantown Ave",      lat:40.0318, lng:-75.1703 },
+  { id:"libraries", name:"Free Library – Fishtown",          address:"1217 E Montgomery Ave",    lat:39.9774, lng:-75.1266 },
+  { id:"libraries", name:"Free Library – Roxborough",        address:"6245 Ridge Ave",           lat:40.0333, lng:-75.2107 },
+  { id:"libraries", name:"Free Library – South Philly",      address:"1700 S Broad St",          lat:39.9291, lng:-75.1693 },
+  { id:"libraries", name:"Free Library – Frankford",         address:"4634 Frankford Ave",       lat:40.0157, lng:-75.0871 },
+  { id:"libraries", name:"Free Library – Cobbs Creek",       address:"5800 Cobbs Creek Pkwy",    lat:39.9436, lng:-75.2390 },
+  { id:"libraries", name:"Free Library – Nicetown-Tioga",    address:"3720 N Broad St",          lat:40.0175, lng:-75.1566 },
+  { id:"libraries", name:"Free Library – Wynnefield",        address:"5325 Overbrook Ave",       lat:39.9732, lng:-75.2396 },
+
+  { id:"transit", name:"City Hall Station (BSL/MFL)",        address:"Broad & Market",           lat:39.9526, lng:-75.1643 },
+  { id:"transit", name:"Suburban Station",                   address:"16th & JFK Blvd",          lat:39.9542, lng:-75.1668 },
+  { id:"transit", name:"30th Street Station",                address:"3000 Market St",           lat:39.9549, lng:-75.1844 },
+  { id:"transit", name:"Fairmount Station",                  address:"Broad & Fairmount",        lat:39.9671, lng:-75.1605 },
+  { id:"transit", name:"Broad-Girard Station",               address:"Broad & Girard Ave",       lat:39.9715, lng:-75.1594 },
+  { id:"transit", name:"Spring Garden Station",              address:"600 N Front St",           lat:39.9605, lng:-75.1404 },
+  { id:"transit", name:"34th Street Station",                address:"34th & Market",            lat:39.9559, lng:-75.1915 },
+  { id:"transit", name:"NRG Station",                        address:"3600 S Broad St",          lat:39.9054, lng:-75.1739 },
+  { id:"transit", name:"Oregon Station",                     address:"Broad & Oregon Ave",       lat:39.9165, lng:-75.1712 },
+  { id:"transit", name:"69th St Transit Center",             address:"6901 Market St",           lat:39.9624, lng:-75.2594 },
+
+  { id:"green", name:"Fairmount Park",                       address:"Reservoir Dr",             lat:39.9881, lng:-75.1971 },
+  { id:"green", name:"Rittenhouse Square",                   address:"1800 Walnut St",           lat:39.9495, lng:-75.1719 },
+  { id:"green", name:"Drexel Park",                          address:"3100 Powelton Ave",        lat:39.9612, lng:-75.1876 },
+  { id:"green", name:"Spruce Street Harbor Park",            address:"301 S Columbus Blvd",      lat:39.9444, lng:-75.1415 },
+  { id:"green", name:"Cira Green",                           address:"129 S 30th St",            lat:39.9527, lng:-75.1833 },
+  { id:"green", name:"Pastorius Park",                       address:"8177 Roanoke St",          lat:40.0708, lng:-75.2051 },
+  { id:"green", name:"Clark Park",                           address:"4301 Baltimore Ave",       lat:39.9468, lng:-75.2138 },
+  { id:"green", name:"FDR Park",                             address:"1500 Pattison Ave",        lat:39.9072, lng:-75.1740 },
+  { id:"green", name:"Pennypack Park",                       address:"8600 Verree Rd",           lat:40.0720, lng:-75.0550 },
+  { id:"green", name:"Cobbs Creek Park",                     address:"Cobbs Creek Pkwy",         lat:39.9456, lng:-75.2350 },
+
+  { id:"hospitals", name:"Temple University Hospital",       address:"3401 N Broad St",          lat:40.0058, lng:-75.1505 },
+  { id:"hospitals", name:"Hospital of the Univ. of Penn",    address:"3400 Spruce St",           lat:39.9501, lng:-75.1939 },
+  { id:"hospitals", name:"Jefferson University Hospital",    address:"111 S 11th St",            lat:39.9493, lng:-75.1580 },
+  { id:"hospitals", name:"Pennsylvania Hospital",            address:"800 Spruce St",            lat:39.9454, lng:-75.1556 },
+  { id:"hospitals", name:"Children's Hospital (CHOP)",       address:"3401 Civic Center Blvd",   lat:39.9487, lng:-75.1939 },
+  { id:"hospitals", name:"Jefferson Einstein Hospital",      address:"5501 Old York Rd",         lat:40.0366, lng:-75.1424 },
+  { id:"hospitals", name:"Jefferson Frankford Hospital",     address:"4900 Frankford Ave",       lat:40.0202, lng:-75.0812 },
+  { id:"hospitals", name:"Roxborough Memorial Hospital",     address:"5800 Ridge Ave",           lat:40.0289, lng:-75.2094 },
+  { id:"hospitals", name:"Jefferson Torresdale Hospital",    address:"10800 Knights Rd",         lat:40.0715, lng:-74.9825 },
+
+  { id:"community_health", name:"Health Center 2",           address:"1700 S Broad St",          lat:39.9290, lng:-75.1693 },
+  { id:"community_health", name:"Health Center 1",           address:"1930 S Broad St",          lat:39.9265, lng:-75.1707 },
+  { id:"community_health", name:"District 5 Health Center",  address:"1900 N 20th St",           lat:39.9836, lng:-75.1670 },
+  { id:"community_health", name:"Health Center 9",           address:"131 E Chelten Ave",        lat:40.0379, lng:-75.1731 },
+  { id:"community_health", name:"Health Center 6",           address:"321 W Girard Ave",         lat:39.9700, lng:-75.1419 },
+  { id:"community_health", name:"Spectrum Community Health", address:"5201 Haverford Ave",       lat:39.9655, lng:-75.2250 },
+  { id:"community_health", name:"Health Center 3",           address:"555 S 43rd St",            lat:39.9489, lng:-75.2089 },
+  { id:"community_health", name:"Quality Community Health",  address:"2501 W Lehigh Ave",        lat:39.9965, lng:-75.1726 },
+
+  { id:"food", name:"Fresh Grocer – Progress Plaza",         address:"1501 N Broad St",          lat:39.9769, lng:-75.1576 },
+  { id:"food", name:"ACME – Girard Ave",                     address:"180 W Girard Ave",         lat:39.9690, lng:-75.1391 },
+  { id:"food", name:"Whole Foods – Fairmount",               address:"2101 Pennsylvania Ave",    lat:39.9630, lng:-75.1742 },
+  { id:"food", name:"GIANT – 23rd St",                       address:"60 N 23rd St",             lat:39.9565, lng:-75.1783 },
+  { id:"food", name:"Trader Joe's – Market St",              address:"2121 Market St",           lat:39.9544, lng:-75.1761 },
+  { id:"food", name:"ACME – Walnut St (W. Philly)",          address:"4001 Walnut St",           lat:39.9546, lng:-75.2030 },
+  { id:"food", name:"ACME – South Philly",                   address:"1901 Johnston St",         lat:39.9169, lng:-75.1803 },
+  { id:"food", name:"ACME – South St",                       address:"1001 South St",            lat:39.9430, lng:-75.1589 },
+  { id:"food", name:"Fresh Market – Chestnut Hill",          address:"8208 Germantown Ave",      lat:40.0732, lng:-75.2032 },
+  { id:"food", name:"Reading Terminal Market",               address:"51 N 12th St",             lat:39.9531, lng:-75.1591 },
+
+  { id:"anchor", name:"University of Pennsylvania",          address:"3451 Walnut St",           lat:39.9515, lng:-75.1910 },
+  { id:"anchor", name:"Drexel University",                   address:"3141 Chestnut St",         lat:39.9566, lng:-75.1899 },
+  { id:"anchor", name:"Temple University",                   address:"1801 N Broad St",          lat:39.9810, lng:-75.1556 },
+  { id:"anchor", name:"Jefferson University",                address:"901 Walnut St",            lat:39.9484, lng:-75.1572 },
+  { id:"anchor", name:"Community College of Philadelphia",   address:"1700 Spring Garden St",    lat:39.9665, lng:-75.1650 },
+  { id:"anchor", name:"Philadelphia Museum of Art",          address:"2600 Ben Franklin Pkwy",   lat:39.9656, lng:-75.1810 },
+  { id:"anchor", name:"The Barnes Foundation",               address:"2025 Ben Franklin Pkwy",   lat:39.9619, lng:-75.1730 },
+  { id:"anchor", name:"Philadelphia Intl Airport",           address:"8000 Essington Ave",       lat:39.8729, lng:-75.2437 },
+
+  { id:"employment", name:"PA CareerLink – Suburban Station",address:"1617 JFK Blvd",            lat:39.9542, lng:-75.1674 },
+  { id:"employment", name:"PA CareerLink – North Philly",    address:"4261 N 5th St",            lat:40.0162, lng:-75.1342 },
+  { id:"employment", name:"PA CareerLink – West Philly",     address:"3901 Market St",           lat:39.9574, lng:-75.2007 },
+  { id:"employment", name:"Philadelphia Works",              address:"1617 JFK Blvd 13th fl",    lat:39.9530, lng:-75.1666 },
+  { id:"employment", name:"Philadelphia OIC",                address:"1231 N Broad St",          lat:39.9745, lng:-75.1556 },
+  { id:"employment", name:"Dornsife Center (Drexel)",        address:"3509 Spring Garden St",    lat:39.9629, lng:-75.1937 },
+];
+
+const map = L.map("map", { center:[39.9526, -75.1652], zoom:12 });
+
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom:19
+}).addTo(map);
+
+function makeIcon(color) {
+  return L.divIcon({
+    className:"",
+    html:`<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.35)"></div>`,
+    iconSize:[13,13], iconAnchor:[6,6], popupAnchor:[0,-8]
+  });
+}
+
+const groups = {};
+const state  = {};
+LAYERS.forEach(l => { groups[l.id] = L.layerGroup(); state[l.id] = true; });
+
+PLACES.forEach(p => {
+  const layer = LAYERS.find(l => l.id === p.id);
+  L.marker([p.lat, p.lng], { icon: makeIcon(layer.color) })
+    .bindPopup(`<div class="popup">
+      <div class="popup-cat" style="color:${layer.color}">${layer.label}</div>
+      <div class="popup-name">${p.name}</div>
+      <div class="popup-addr">${p.address}</div>
+    </div>`, { maxWidth:240 })
+    .addTo(groups[p.id]);
+});
+
+Object.values(groups).forEach(g => g.addTo(map));
+
+const ctrlEl = document.getElementById("controls");
+
+LAYERS.forEach(l => {
+  const btn = document.createElement("button");
+  btn.className = "layer-btn";
+  btn.style.cssText = `border-color:${l.color};background:${l.bg};color:${l.color}`;
+  btn.innerHTML = `<span class="dot" style="background:${l.color}"></span>${l.label}`;
+  btn.onclick = () => {
+    state[l.id] = !state[l.id];
+    if (state[l.id]) {
+      groups[l.id].addTo(map);
+      btn.style.cssText = `border-color:${l.color};background:${l.bg};color:${l.color}`;
+      btn.querySelector(".dot").style.background = l.color;
+    } else {
+      map.removeLayer(groups[l.id]);
+      btn.style.cssText = `border-color:#D3D1C7;background:#fff;color:#888780`;
+      btn.querySelector(".dot").style.background = "#D3D1C7";
+    }
+    updateStatus();
+  };
+  ctrlEl.appendChild(btn);
+});
+
+function updateStatus() {
+  const bar = document.getElementById("status");
+  const active = LAYERS.filter(l => state[l.id]);
+  if (!active.length) { bar.innerHTML = `<span style="font-size:11px;color:#aaa">All layers hidden</span>`; return; }
+  bar.innerHTML = active.map(l => {
+    const count = PLACES.filter(p => p.id === l.id).length;
+    return `<span class="status-item" style="color:${l.color}">${l.label}: ${count}</span>`;
+  }).join("");
+}
+updateStatus();
+</script>
+</body>
+</html>
